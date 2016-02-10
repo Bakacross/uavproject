@@ -10,11 +10,14 @@ using namespace std;
 
 static const double pi = 3.14159265358979323846;
 int maxCorners = 50;
+int thresholdCorners = 700;
 double qualityLevel = 0.01;
 double minDistance = 10;
 int blockSize = 3;
 bool useHarrisDetector = false;
 double k_harris = 0.04;
+double alpha = 1;
+double alpha2 = 1;
 
 inline static double square(int a)
 
@@ -28,27 +31,28 @@ void refresh_features(Mat gray, vector<Point2f> &flow_c);
 
 int main(int argc, char* argv[])
 {
-	Mat image1, image2, image_gray1, image_gray2;
+	Mat image1, image2, image_gray1, image_gray2, image2_average;
 	vector< Point2f > corners, flow_corners, new_corners;
 	int initial_nb;
 	Mat mask(image_gray1.size(), CV_8UC1, Scalar(255));
-
+	vector<double> hypotenuse, hypotenuse2;
+	vector<double> angle;
 	vector<uchar> status;
 	vector<float> err;
+	double mean_hypotenuse;
+	double color;
 	Size optical_flow_window = cvSize(3, 3);
 	TermCriteria optical_flow_termination_criteria = cvTermCriteria(CV_TERMCRIT_ITER | CV_TERMCRIT_EPS, 50, 0.01);
-
 	int line_thickness = 1;
 	CvPoint p, q;
-	double angle, hypotenuse;
 	CvScalar line_color;
 	line_color = CV_RGB(255, 0, 0);
 	RNG rng(12345);
-	//hohohoho
+
 	//VideoCapture cap(0); //capture the video from webcam
 	VideoCapture cap("dronecam3.mp4");
 	int fps = cap.get(CV_CAP_PROP_FPS);
-	cap.set(CV_CAP_PROP_POS_MSEC, 500);
+	cap.set(CV_CAP_PROP_POS_MSEC, 5000);
 
 	if (!cap.isOpened())  // if not success, exit program
 	{
@@ -57,6 +61,7 @@ int main(int argc, char* argv[])
 	}
 
 	namedWindow("Flow", CV_WINDOW_AUTOSIZE);
+	namedWindow("Flow average", CV_WINDOW_AUTOSIZE);
 	//namedWindow("Depth Estimation", CV_WINDOW_AUTOSIZE);
 	//namedWindow("Mask", CV_WINDOW_AUTOSIZE);
 
@@ -68,70 +73,104 @@ int main(int argc, char* argv[])
 	while (1) {
 
 		cap.read(image2); // read a new frame from video
+		image2.copyTo(image2_average);
 		Mat bg(image2.size(), CV_8UC3, Scalar(255, 255, 255));
 		cvtColor(image2, image_gray2, CV_BGR2GRAY);
 		calcOpticalFlowPyrLK(image_gray1, image_gray2, corners, flow_corners, status, err, optical_flow_window, 5, optical_flow_termination_criteria, 0, 0.001);
-
+		int counter = 0;
 		size_t i, k;
 		if (!flow_corners.empty()) {
+			hypotenuse.clear();
+			angle.clear();
+			mean_hypotenuse = 0;
 			for (i = k = 0; i < flow_corners.size(); i++)
 
 			{
 				// if LK failed don't draw and delete it from vector corners
-				if (!status[i] || err[i] > 50)
+				if (!status[i] || err[i] > 50) {
 					continue;
+				}
+
+				angle.push_back(atan2(corners[i].y - flow_corners[i].y, corners[i].x - flow_corners[i].x));
+				hypotenuse.push_back(sqrt(square(flow_corners[i].x - corners[i].x) + square(flow_corners[i].y - corners[i].y)));
+				mean_hypotenuse += sqrt(square(flow_corners[i].x - corners[i].x) + square(flow_corners[i].y - corners[i].y));
+				corners[k] = corners[i];
+				flow_corners[k++] = flow_corners[i];
+
+
+			}
+			flow_corners.resize(k);
+			corners.resize(k);
+			mean_hypotenuse /= hypotenuse.size();
+			hypotenuse2.insert(hypotenuse2.end(), hypotenuse.begin(), hypotenuse.end());
+		}
+
+
+		if (!hypotenuse.empty()) {
+			for (i = 0; i < hypotenuse.size(); i++) {
+
+				if (i == 0) {
+
+				}
+				hypotenuse[i] = alpha*hypotenuse[i] + (1 - alpha)*hypotenuse[i - 1];
+				hypotenuse2[i] = alpha2*hypotenuse2[i] + (1 - alpha2)*hypotenuse2[i - 1];
+				//color = hypotenuse[i] * 255 / (hypotenuse[i] + 3);
+				//circle(image2, flow_corners[i], 3, Scalar(0, 255 - color, color), -1, 8);
+				//cout << hypotenuse.size() << " " << flow_corners.size() << endl;
+				/* DRAW ARROW */
 
 				p.x = (int)corners[i].x;
 				p.y = (int)corners[i].y;
 				q.x = (int)flow_corners[i].x;
 				q.y = (int)flow_corners[i].y;
 
-				angle = atan2((double)p.y - q.y, (double)p.x - q.x);
-				//hypotenuse = sqrt(square(p.y - q.y) + square(p.x - q.x));
-				hypotenuse = sqrt(square(flow_corners[i].x - corners[i].x) + square(flow_corners[i].y - corners[i].y));
-
-				/* DRAW ARROW */
-
-				/*
-				q.x = (int)(p.x - 3 * hypotenuse * cos(angle));
-				q.y = (int)(p.y - 3 * hypotenuse * sin(angle));
+				q.x = (int)(p.x - 3 * hypotenuse[i] * cos(angle[i]));
+				q.y = (int)(p.y - 3 * hypotenuse[i] * sin(angle[i]));
 
 				line(image2, p, q, line_color, line_thickness, CV_AA, 0);
 
-				p.x = (int)(q.x + 3 * cos(angle + pi / 4));
-				p.y = (int)(q.y + 3 * sin(angle + pi / 4));
+				p.x = (int)(q.x + 3 * cos(angle[i] + pi / 4));
+				p.y = (int)(q.y + 3 * sin(angle[i] + pi / 4));
 
 				line(image2, p, q, line_color, line_thickness, CV_AA, 0);
 
-				p.x = (int)(q.x + 3 * cos(angle - pi / 4));
-				p.y = (int)(q.y + 3 * sin(angle - pi / 4));
+				p.x = (int)(q.x + 3 * cos(angle[i] - pi / 4));
+				p.y = (int)(q.y + 3 * sin(angle[i] - pi / 4));
 
 				line(image2, p, q, line_color, line_thickness, CV_AA, 0);
-				//}
-				*/
-				int hihi = hypotenuse * 255 / (hypotenuse + 3);
-				//if (hihi > 255) hihi = 255;
 
-				circle(image2, flow_corners[i], 3, Scalar(0, 255 - hihi, hihi), -1, 8);
+				//
 
-				//putText(image2, to_string(int(hypotenuse)), flow_corners[i], FONT_HERSHEY_COMPLEX_SMALL, 0.8, Scalar(0, 0, 0), 1, CV_AA);
+				p.x = (int)corners[i].x;
+				p.y = (int)corners[i].y;
+				q.x = (int)flow_corners[i].x;
+				q.y = (int)flow_corners[i].y;
 
-				flow_corners[k++] = flow_corners[i];
+				q.x = (int)(p.x - 3 * hypotenuse2[i] * cos(angle[i]));
+				q.y = (int)(p.y - 3 * hypotenuse2[i] * sin(angle[i]));
 
+				line(image2_average, p, q, line_color, line_thickness, CV_AA, 0);
 
+				p.x = (int)(q.x + 3 * cos(angle[i] + pi / 4));
+				p.y = (int)(q.y + 3 * sin(angle[i] + pi / 4));
+
+				line(image2_average, p, q, line_color, line_thickness, CV_AA, 0);
+
+				p.x = (int)(q.x + 3 * cos(angle[i] - pi / 4));
+				p.y = (int)(q.y + 3 * sin(angle[i] - pi / 4));
+
+				line(image2_average, p, q, line_color, line_thickness, CV_AA, 0);
 			}
-			flow_corners.resize(k);
 		}
 
 		imshow("Flow", image2);
+		imshow("Flow average", image2_average);
 		//imshow("Depth Estimation", bg);
 
-		if (flow_corners.size() < 700)
+		if (flow_corners.size() < thresholdCorners)
 		{
-			cout << "size " << flow_corners.size() << " initial_nb" << initial_nb << endl;
 			refresh_features(image_gray2, flow_corners);
 			initial_nb = flow_corners.size();
-			cout << "new size " << flow_corners.size() << endl;
 		}
 
 		swap(image_gray1, image_gray2);
