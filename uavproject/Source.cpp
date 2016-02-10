@@ -44,7 +44,7 @@ int main(int argc, char* argv[])
 	CvScalar line_color;
 	line_color = CV_RGB(255, 0, 0);
 	RNG rng(12345);
-	//TEST
+	//hohohoho
 	//VideoCapture cap(0); //capture the video from webcam
 	VideoCapture cap("dronecam3.mp4");
 	int fps = cap.get(CV_CAP_PROP_FPS);
