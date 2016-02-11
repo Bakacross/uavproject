@@ -17,7 +17,6 @@ int blockSize = 3;
 bool useHarrisDetector = false;
 double k_harris = 0.04;
 double alpha = 1;
-double alpha2 = 1;
 
 inline static double square(int a)
 
@@ -35,7 +34,8 @@ int main(int argc, char* argv[])
 	vector< Point2f > corners, flow_corners, new_corners;
 	int initial_nb;
 	Mat mask(image_gray1.size(), CV_8UC1, Scalar(255));
-	vector<double> hypotenuse, hypotenuse2;
+	vector<double> hypotenuse, hypotenuseLast;
+	bool first = 1;
 	vector<double> angle;
 	vector<uchar> status;
 	vector<float> err;
@@ -50,7 +50,7 @@ int main(int argc, char* argv[])
 	RNG rng(12345);
 
 	//VideoCapture cap(0); //capture the video from webcam
-	VideoCapture cap("dronecam3.mp4");
+	VideoCapture cap("dronecourse360p.mp4");
 	int fps = cap.get(CV_CAP_PROP_FPS);
 	cap.set(CV_CAP_PROP_POS_MSEC, 5000);
 
@@ -77,7 +77,6 @@ int main(int argc, char* argv[])
 		Mat bg(image2.size(), CV_8UC3, Scalar(255, 255, 255));
 		cvtColor(image2, image_gray2, CV_BGR2GRAY);
 		calcOpticalFlowPyrLK(image_gray1, image_gray2, corners, flow_corners, status, err, optical_flow_window, 5, optical_flow_termination_criteria, 0, 0.001);
-		int counter = 0;
 		size_t i, k;
 		if (!flow_corners.empty()) {
 			hypotenuse.clear();
@@ -102,21 +101,16 @@ int main(int argc, char* argv[])
 			flow_corners.resize(k);
 			corners.resize(k);
 			mean_hypotenuse /= hypotenuse.size();
-			hypotenuse2.insert(hypotenuse2.end(), hypotenuse.begin(), hypotenuse.end());
+			
 		}
 
 
 		if (!hypotenuse.empty()) {
-			for (i = 0; i < hypotenuse.size(); i++) {
+			for (i = 1; i < hypotenuse.size(); i++) { //begin at i = 1 !
 
-				if (i == 0) {
-
-				}
-				hypotenuse[i] = alpha*hypotenuse[i] + (1 - alpha)*hypotenuse[i - 1];
-				hypotenuse2[i] = alpha2*hypotenuse2[i] + (1 - alpha2)*hypotenuse2[i - 1];
 				//color = hypotenuse[i] * 255 / (hypotenuse[i] + 3);
 				//circle(image2, flow_corners[i], 3, Scalar(0, 255 - color, color), -1, 8);
-				//cout << hypotenuse.size() << " " << flow_corners.size() << endl;
+
 				/* DRAW ARROW */
 
 				p.x = (int)corners[i].x;
@@ -141,25 +135,34 @@ int main(int argc, char* argv[])
 
 				//
 
-				p.x = (int)corners[i].x;
-				p.y = (int)corners[i].y;
-				q.x = (int)flow_corners[i].x;
-				q.y = (int)flow_corners[i].y;
+				if (first) {
+					first = 0;
+					hypotenuseLast = hypotenuse;
+				}
+				else {
 
-				q.x = (int)(p.x - 3 * hypotenuse2[i] * cos(angle[i]));
-				q.y = (int)(p.y - 3 * hypotenuse2[i] * sin(angle[i]));
+					p.x = (int)corners[i].x;
+					p.y = (int)corners[i].y;
+					q.x = (int)flow_corners[i].x;
+					q.y = (int)flow_corners[i].y;
 
-				line(image2_average, p, q, line_color, line_thickness, CV_AA, 0);
+					q.x = (int)(p.x - 3 * (alpha*hypotenuse[i] + (1 - alpha)*hypotenuseLast[i]) * cos(angle[i]));
+					q.y = (int)(p.y - 3 * (alpha*hypotenuse[i] + (1 - alpha)*hypotenuseLast[i]) * sin(angle[i]));
 
-				p.x = (int)(q.x + 3 * cos(angle[i] + pi / 4));
-				p.y = (int)(q.y + 3 * sin(angle[i] + pi / 4));
+					line(image2_average, p, q, line_color, line_thickness, CV_AA, 0);
 
-				line(image2_average, p, q, line_color, line_thickness, CV_AA, 0);
+					p.x = (int)(q.x + 3 * cos(angle[i] + pi / 4));
+					p.y = (int)(q.y + 3 * sin(angle[i] + pi / 4));
 
-				p.x = (int)(q.x + 3 * cos(angle[i] - pi / 4));
-				p.y = (int)(q.y + 3 * sin(angle[i] - pi / 4));
+					line(image2_average, p, q, line_color, line_thickness, CV_AA, 0);
 
-				line(image2_average, p, q, line_color, line_thickness, CV_AA, 0);
+					p.x = (int)(q.x + 3 * cos(angle[i] - pi / 4));
+					p.y = (int)(q.y + 3 * sin(angle[i] - pi / 4));
+
+					line(image2_average, p, q, line_color, line_thickness, CV_AA, 0);
+					if (hypotenuse[i] - hypotenuseLast[i] != 0) { cout << hypotenuse[i] - hypotenuseLast[i] << endl; }
+					hypotenuseLast = hypotenuse;
+				}	
 			}
 		}
 
