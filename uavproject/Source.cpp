@@ -9,7 +9,7 @@ using namespace cv;
 using namespace std;
 
 static const double pi = 3.14159265358979323846;
-int maxCorners = 50;
+int maxCorners = 70;
 int thresholdCorners = 700;
 double qualityLevel = 0.01;
 double minDistance = 10;
@@ -26,19 +26,22 @@ inline static double square(int a)
 
 }
 
-void refresh_features(Mat gray, vector<Point2f> &flow_c);
+void refresh_features(Mat gray, vector<Point2f> &flow_c, vector<Point2f> &flow_c_a);
 
 int main(int argc, char* argv[])
 {
 	Mat image1, image2, image_gray1, image_gray2, image2_average;
-	vector< Point2f > corners, flow_corners, new_corners;
+	vector< Point2f > corners, corners_average, flow_corners, flow_corners_average, new_corners;
+	Point2f hihi;
+	hihi.x = 10;
+	hihi.y = 50;
 	int initial_nb;
 	Mat mask(image_gray1.size(), CV_8UC1, Scalar(255));
 	vector<double> hypotenuse, hypotenuseLast;
 	bool first = 1;
-	vector<double> angle;
-	vector<uchar> status;
-	vector<float> err;
+	vector<double> angle, angle_average, hypotenuse_average;
+	vector<uchar> status, status_average;
+	vector<float> err, err_average;
 	double mean_hypotenuse;
 	double color;
 	Size optical_flow_window = cvSize(3, 3);
@@ -68,6 +71,7 @@ int main(int argc, char* argv[])
 	cap.read(image1); // read a new frame from video
 	cvtColor(image1, image_gray1, CV_BGR2GRAY);
 	goodFeaturesToTrack(image_gray1, corners, maxCorners, qualityLevel, minDistance, mask, blockSize, useHarrisDetector, k_harris);
+	corners_average = corners;
 	initial_nb = corners.size();
 
 	while (1) {
@@ -77,6 +81,7 @@ int main(int argc, char* argv[])
 		Mat bg(image2.size(), CV_8UC3, Scalar(255, 255, 255));
 		cvtColor(image2, image_gray2, CV_BGR2GRAY);
 		calcOpticalFlowPyrLK(image_gray1, image_gray2, corners, flow_corners, status, err, optical_flow_window, 5, optical_flow_termination_criteria, 0, 0.001);
+		calcOpticalFlowPyrLK(image_gray1, image_gray2, corners_average, flow_corners_average, status_average, err_average, optical_flow_window, 5, optical_flow_termination_criteria, 0, 0.001);
 		size_t i, k;
 		if (!flow_corners.empty()) {
 			hypotenuse.clear();
@@ -89,7 +94,7 @@ int main(int argc, char* argv[])
 				if (!status[i] || err[i] > 50) {
 					continue;
 				}
-
+				
 				angle.push_back(atan2(corners[i].y - flow_corners[i].y, corners[i].x - flow_corners[i].x));
 				hypotenuse.push_back(sqrt(square(flow_corners[i].x - corners[i].x) + square(flow_corners[i].y - corners[i].y)));
 				mean_hypotenuse += sqrt(square(flow_corners[i].x - corners[i].x) + square(flow_corners[i].y - corners[i].y));
@@ -108,11 +113,11 @@ int main(int argc, char* argv[])
 		if (!hypotenuse.empty()) {
 			for (i = 1; i < hypotenuse.size(); i++) { //begin at i = 1 !
 
-				//color = hypotenuse[i] * 255 / (hypotenuse[i] + 3);
-				//circle(image2, flow_corners[i], 3, Scalar(0, 255 - color, color), -1, 8);
+				color = hypotenuse[i] * 255 / (hypotenuse[i] + 3);
+				circle(image2, flow_corners[i], 3, Scalar(0, 255 - color, color), -1, 8);
 
 				/* DRAW ARROW */
-
+				/*
 				p.x = (int)corners[i].x;
 				p.y = (int)corners[i].y;
 				q.x = (int)flow_corners[i].x;
@@ -132,52 +137,80 @@ int main(int argc, char* argv[])
 				p.y = (int)(q.y + 3 * sin(angle[i] - pi / 4));
 
 				line(image2, p, q, line_color, line_thickness, CV_AA, 0);
-
-				//
-
-				if (first) {
-					first = 0;
-					hypotenuseLast = hypotenuse;
-				}
-				else {
-
-					p.x = (int)corners[i].x;
-					p.y = (int)corners[i].y;
-					q.x = (int)flow_corners[i].x;
-					q.y = (int)flow_corners[i].y;
-
-					q.x = (int)(p.x - 3 * (alpha*hypotenuse[i] + (1 - alpha)*hypotenuseLast[i]) * cos(angle[i]));
-					q.y = (int)(p.y - 3 * (alpha*hypotenuse[i] + (1 - alpha)*hypotenuseLast[i]) * sin(angle[i]));
-
-					line(image2_average, p, q, line_color, line_thickness, CV_AA, 0);
-
-					p.x = (int)(q.x + 3 * cos(angle[i] + pi / 4));
-					p.y = (int)(q.y + 3 * sin(angle[i] + pi / 4));
-
-					line(image2_average, p, q, line_color, line_thickness, CV_AA, 0);
-
-					p.x = (int)(q.x + 3 * cos(angle[i] - pi / 4));
-					p.y = (int)(q.y + 3 * sin(angle[i] - pi / 4));
-
-					line(image2_average, p, q, line_color, line_thickness, CV_AA, 0);
-					if (hypotenuse[i] - hypotenuseLast[i] != 0) { cout << hypotenuse[i] - hypotenuseLast[i] << endl; }
-					hypotenuseLast = hypotenuse;
-				}	
+				*/
 			}
 		}
 
+		if (!flow_corners_average.empty()) {
+			hypotenuse_average.clear();
+			angle_average.clear();
+			for (i = k = 0; i < flow_corners_average.size(); i++)
+
+			{
+				// if LK failed don't draw and delete it from vector corners
+				if (!status_average[i] || err_average[i] > 50) {
+					continue;
+				}
+				flow_corners_average[i] = flow_corners_average[i] * alpha + corners_average[i] * (1 - alpha);
+				if (abs(sqrt(square(flow_corners_average[i].x - corners_average[i].x) + square(flow_corners_average[i].y - corners_average[i].y))) < 40) {
+					angle_average.push_back(atan2(corners_average[i].y - flow_corners_average[i].y, corners_average[i].x - flow_corners_average[i].x));
+					hypotenuse_average.push_back(sqrt(square(flow_corners_average[i].x - corners_average[i].x) + square(flow_corners_average[i].y - corners_average[i].y)));
+					corners_average[k] = corners_average[i];
+					flow_corners_average[k++] = flow_corners_average[i];
+				}
+				
+				
+
+
+			}
+			flow_corners_average.resize(k);
+			corners_average.resize(k);
+		}
+
+
+		if (!hypotenuse_average.empty()) {
+			for (i = 1; i < hypotenuse_average.size(); i++) {
+
+				color = hypotenuse_average[i] * 255 / (hypotenuse_average[i] + 3);
+				circle(image2_average, flow_corners_average[i], 3, Scalar(0, 255 - color, color), -1, 8);
+				/*
+				p.x = (int)corners_average[i].x;
+				p.y = (int)corners_average[i].y;
+				q.x = (int)flow_corners_average[i].x;
+				q.y = (int)flow_corners_average[i].y;
+
+				q.x = (int)(p.x - 3 * hypotenuse_average[i] * cos(angle_average[i]));
+				q.y = (int)(p.y - 3 * hypotenuse_average[i] * sin(angle_average[i]));
+
+				line(image2_average, p, q, line_color, line_thickness, CV_AA, 0);
+
+				p.x = (int)(q.x + 3 * cos(angle_average[i] + pi / 4));
+				p.y = (int)(q.y + 3 * sin(angle_average[i] + pi / 4));
+
+				line(image2_average, p, q, line_color, line_thickness, CV_AA, 0);
+
+				p.x = (int)(q.x + 3 * cos(angle_average[i] - pi / 4));
+				p.y = (int)(q.y + 3 * sin(angle_average[i] - pi / 4));
+
+				line(image2_average, p, q, line_color, line_thickness, CV_AA, 0);
+				*/
+			}
+		}
+		putText(image2, to_string(int(hypotenuse.size())), hihi, FONT_HERSHEY_COMPLEX_SMALL, 2, Scalar(0, 0, 255), 1, CV_AA);
+		putText(image2_average, to_string(int(hypotenuse_average.size())), hihi, FONT_HERSHEY_COMPLEX_SMALL, 2, Scalar(0, 0, 255), 1, CV_AA);
 		imshow("Flow", image2);
 		imshow("Flow average", image2_average);
 		//imshow("Depth Estimation", bg);
 
 		if (flow_corners.size() < thresholdCorners)
 		{
-			refresh_features(image_gray2, flow_corners);
+			refresh_features(image_gray2, flow_corners, flow_corners_average);
 			initial_nb = flow_corners.size();
 		}
 
 		swap(image_gray1, image_gray2);
 		swap(corners, flow_corners);
+		swap(corners_average, flow_corners_average);
 		waitKey(1000 / fps);
 		//waitKey(0);
 		if (waitKey(10) == 27) //wait for 'esc' key press for 30 ms. If 'esc' key is pressed, break loop
@@ -191,7 +224,7 @@ int main(int argc, char* argv[])
 	}
 }
 
-void refresh_features(Mat gray, vector<Point2f> &flow_c)
+void refresh_features(Mat gray, vector<Point2f> &flow_c, vector<Point2f> &flow_c_a)
 {
 	//Mat mask(image_gray.size(), CV_8UC1, Scalar(255));
 	int size_mask = 40;
@@ -240,6 +273,7 @@ void refresh_features(Mat gray, vector<Point2f> &flow_c)
 	}
 	goodFeaturesToTrack(gray, new_corners, maxCorners, qualityLevel, minDistance, mask, blockSize, useHarrisDetector, k_harris);
 	flow_c.insert(flow_c.end(), new_corners.begin(), new_corners.end());
+	flow_c_a.insert(flow_c_a.end(), new_corners.begin(), new_corners.end());
 
 	//imshow("Mask", mask);
 }
